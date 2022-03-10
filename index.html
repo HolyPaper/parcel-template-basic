@@ -1,16 +1,271 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Document</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/meyer-reset/2.0/reset.min.css">
-  <link rel="stylesheet" href="./scss/main.scss">
-  <script defer src="./js/main.js"></script>
+  <title>국가공간정보포털 OpenAPI</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/js/bootstrap.min.js"></script>
+  <!-- 오픈API -->
+  <script type="text/javaScript" src="http://www.nsdi.go.kr/lxportal/zcms/nsdi/platform/sdkGeoView.js.html?authkey=6d098e793a1642e9a516e710aec3efdf"></script>
+ 
+  <style>
+    .row.content {height: 100%}
+   
+    .sidenav {
+      padding-top: 20px;
+      background-color: #f1f1f1;
+      height: 100%;
+    }
+    
+    @media screen and (max-width: 767px) {
+      .sidenav {
+        height: auto;
+        padding: 15px;
+      }
+      .row.content {height:auto;} 
+    }
+    
+    #btnAddToMap{
+      margin-right: 25px;
+      padding-right: 10px;
+      padding-left: 10px;
+    }
+    #clearMap{
+      margin-right: 25px;
+      padding-right: 25px;
+      padding-left: 25px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Hello Parcel!</h1>
-  <img src="./images/logo.png" alt="Heropy">
+ 
+<div class="container-fluid text-center">        
+  <div class="row content">
+    <div class="col-sm-3 sidenav">
+      <div class="well">
+        <p>데이터 목록</a></p>
+        <select id="dataList" size="7" style="border: solid 1px;width: 100%;height: 355px;"></select>
+        
+        <h4>Column(차트 Y축)</h4>
+        <select id="dataColumn" size="7" style="border: solid 1px;  width: 100%; height: 125px;"></select>
+        
+        <h4>Column(차트 X축)</h4>
+        <select id="dataColumn2" size="7" style="border: solid 1px;  width: 100%; height: 125px;"></select>
+                    
+      </div>
+      <div class="container" style="width: auto;">
+        <input class="btn btn-primary" type="button" id="btnAddToMap" value='확인'/>
+        <input class="btn btn-danger" type="button" id="clearMap" value='초기화'/>
+      </div>    
+    </div>
+    <div class="col-sm-5 text-left">
+       <div class="row">
+        <div class="col-sm-12">
+          <div class="panel panel-default text-left">
+            <div class="panel-body">
+               <div id="sampleMap" style="height: 800px; width:100%;border: solid 1px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-4 sidenav">
+      <div class="well">
+        <p>차트</p>
+        <div id="sampleChart" style="height: 250px;"></div>
+      </div>
+      <div class="well">
+        <p>컬럼테이블</p>
+        <table id="sampleGrid" style="height : 380px; width: 100%;"></table>
+      </div>
+    </div>
+  </div>
+</div>
+ 
+<script>
+var map;
+var apiUrl = "http://www.nsdi.go.kr/lxportal/zcms/nsdi/platform/openapi.html";
+var authkey = '6d098e793a1642e9a516e710aec3efdf';
+var bboxResult;
+var userCenter;
+$(document).ready(function(){
+    
+    // 지도생성
+    map = new pf.GeoView("sampleMap","vworld",true,true);
+    
+    map.baseMap.getView().setCenter(ol.proj.transform([948988.4139031649,1947273.5479532676], 'EPSG:3857', 'EPSG:3857'));//여의도
+    map.baseMap.getView().setZoom(13);//지도 표출 레벨 설정
+    map.baseMap.getView().setMinZoom(13)//지도 최소레벨 설정
+    map.baseMap.getView().setMaxZoom(16)//지도 최대레벨 설정
+    map.baseMap.updateSize();
+    
+    map.baseMap.on('moveend', function(){
+        bboxResult = map.baseMap.getView().calculateExtent().toString();
+        userCenter = map.baseMap.getView().getCenter();
+    })
+    //데이터 목록요청
+    getDataList();
+    
+    $("#clearMap").on('click',function(){
+        $("#sampleChart").empty();
+        $("#sampleGrid").empty();
+        $(".tbl_box").remove();
+        newJquery(".lyhidden").click();
+        //map.baseMap.removeLayer(map.baseMap.getLayers().getArray()[5])
+    })
+    // 데이터목록 선택시
+    $("#dataList").on("click",function(){
+        var obj_seq = $(this).val();
+        // 데이터 컬럼 생성
+        getDataColumn(obj_seq);
+    });
+    
+    $("#btnAddToMap").on("click",function(){
+        $("#sampleChart").empty();
+        $("#sampleGrid").empty();
+        $(".tbl_box").remove();
+        newJquery(".lyhidden").click();
+        var obj_seq = $("#dataList").val();
+        var obj_kname = $("#dataList option:selected").attr("label");
+        var obj_val = $("#dataList option:selected").val();
+        var column_name = $("#dataColumn").val();
+        var column_name2 = $("#dataColumn2").val();
+        
+        $.ajax({
+            type: "POST",
+            data:{
+              'apitype': 'data',
+              'resulttype':'geojson',
+              'datasets': obj_seq,
+              'bbox': bboxResult,        // 현재맵의 bbox
+              'authkey':authkey
+            },
+            dataType: "json",
+            async: false,
+            url: apiUrl,
+            success: function(response){
+                data = response;
+                
+                //시각화설정                
+                map.addMapViLayer(data,    // 표출 할 공간정보 데이터를 변수에 넣은 후 변수를 입력합니다.
+                  "geojson"        // 파라미터 번호 1번에 넣을 데이터가 geojson 형식인지 kml 형식인지 구분합니다.
+                  ,obj_val        // 레이어 고유의 이름을 설정합니다.
+                  ,"legend"        // 지도위에 공간정보를 시각화 할 옵션을 선택합니다. legend, bubble, heat 중 선택합니다.
+                  ,column_name        // 시각화 할 속성(숫자)의 이름을 넣습니다.
+                  ,null            // 공간 객체에 표시 하고 싶은 속성이 있다면 속성의 이름을 넣습니다.(문자열만 가능하며 null 입력 시 미표시)
+                  ,obj_kname        // 지도 좌측 상단의 레이어에 표시 하고자 하는 이름을 넣습니다
+                  ,'EPSG:5179'    // 좌표계
+                );
+                
+                map.baseMap.getView().setCenter(ol.proj.transform(userCenter, 'EPSG:3857', 'EPSG:3857'));
+                map.baseMap.getView().setZoom(13);
+                
+                
+                //차트설정
+                map.setChart("sampleChart"    // 차트가 표시 될 DIV 태그의 아이디를 넣습니다.
+                    ,"line"                // 표출 할 차트의 종류를 선택합니다.
+                    ,obj_val            // 지도의 여러 레이어 중 차트에 표시 할 레이어의 이름을 입력 합니다.
+                    ,column_name2            // 지도에 표출 한 공간정보에서 차트에 표출할 속성(숫자)의 이름을 넣습니다.(가로축)
+                    ,obj_kname                // 차트 상단에 표시 할 제목을 적습니다.(null 입력시 미표시)
+                    ,column_name            // Y축에 표시 할 제목을 적습니다.(null 입력시 미표시)
+                    ,column_name            // 세로축
+                );
+                
+                var column_names = $("#dataColumn").find("option").map(function() {
+                    return $(this).val();
+                });
+                
+                //그리드설정
+                map.setGrid("sampleGrid"    // 데이터 테이블이 표시 될 TABLE 태그의 아이디를 넣습니다.
+                    ,obj_val                // 지도의 여러 레이어 중 데이터 테이블에 표시 할 레이어의 이름을 입력 합니다.
+                    ,null                    // 데이터 테이블에 표시 할 속성들의 한글명을 배열 형태로 입력합니다.(null 입력시 4번 파라미터의 속성이름 표시)
+                    ,column_names        // 속성이름
+                    ,obj_kname            // 데이터 테이블에 표시 할 제목을 입력합니다.(null 입력 시 미표시)
+                );
+            }
+        });  
+    });
+    test();
+});
+
+function test(){
+  var xhr = new XMLHttpRequest();     
+    var HttpUrl = "http://openapi.nsdi.go.kr/nsdi/map/LandInfoBaseMapUTMKService"; /*URL*/     
+    var parameter = '?' + encodeURIComponent("authkey") +"="+encodeURIComponent("6d098e793a1642e9a516e710aec3efdf"); /*authkey Key*/     
+    parameter += "&" + encodeURIComponent("layers") + "=" + encodeURIComponent("0"); /* 화면에 표출할 레이어명의 나열, 값은 쉼표로 구분 */  
+    parameter += "&" + encodeURIComponent("crs") + "=" + encodeURIComponent("EPSG:5179"); /* 좌표 체계(산출물을 위한 SRS) */  
+    parameter += "&" + encodeURIComponent("bbox") + "=" + encodeURIComponent("493368.05375831545,1482162.8092609146,1530302.3275239088,2074169.201760915"); /* 크기(extent)를 정의하는 범위(bounding box) */  
+    parameter += "&" + encodeURIComponent("width") + "=" + encodeURIComponent("915"); /* 반환 이미지의 너비(픽셀) */  
+    parameter += "&" + encodeURIComponent("height") + "=" + encodeURIComponent("700"); /* 반환 이미지의 높이(픽셀) */  
+    parameter += "&" + encodeURIComponent("format") + "=" + encodeURIComponent("image/png"); /* 반환 이미지 형식(image/png 또는 image/jpeg 또는 image/gif) */  
+    parameter += "&" + encodeURIComponent("transparent") + "=" + encodeURIComponent("false"); /* 반환 이미지 배경의 투명 여부(true 또는 false[기본값]) */  
+    parameter += "&" + encodeURIComponent("bgcolor") + "=" + encodeURIComponent("0xFFFFFF"); /* 반환 이미지의 배경색(0xRRGGBB) */  
+    parameter += "&" + encodeURIComponent("exceptions") + "=" + encodeURIComponent("blank"); /* 예외 발생 시 처리 방법(blank 또는 xml 또는 inimage) */  
+    
+     
+    xhr.open('GET', HttpUrl + parameter);     
+    xhr.onreadystatechange = function () {     
+        if (this.readyState == 4) {     
+            alert('Status: '+this.status+' Headers: '+JSON.stringify(this.getAllResponseHeaders())+' Body: '+this.responseText);     
+		   }     
+    };     
+xhr.send('');  
+}
+
+//공간 정보 테이블 목록 요청
+function getDataList() {
+    // 데이터목록 생성
+    $.ajax({
+        type: "POST",
+        data:{
+             'apitype': 'dataList',
+             'authkey':authkey
+        },
+        dataType: "json",
+        async: false,
+        url: apiUrl,
+        success: function(response){
+            var dataList = $("#dataList"); 
+            for(key in response) {
+                var obj_seq = response[key].OBJ_SEQ;
+                var obj_kname = response[key].OBJ_KNAME;
+                $("<option value='"+ obj_seq +"' label='"+ obj_kname +"'>"+obj_kname+"</option>")
+                .appendTo(dataList);
+            }
+        }
+    });  
+}
+ 
+//공간 정보 테이블 컬럼 정보 요청
+function getDataColumn(obj_seq) {
+    $.ajax({
+        type: "POST",
+        data:{
+             'apitype': 'columnList',
+             'datasets': obj_seq,
+             'authkey':authkey
+        },
+        dataType: "json",
+        async: false,
+        url: apiUrl,
+        success: function(response){
+             var dataColumn = $("#dataColumn");
+             dataColumn.empty();
+             var dataColumn2 = $("#dataColumn2");
+             dataColumn2.empty();
+             for(key in response) {
+                var column_id = response[key].COLUMN_ID;
+                var comments = response[key].COMMENTS;
+                var column_name = response[key].COLUMN_NAME;
+                comments = !comments?column_name:comments;
+                $("<option value='"+column_name+"' label='"+comments+"'>"+comments+"</option>").appendTo(dataColumn);
+                $("<option value='"+column_name+"' label='"+comments+"'>"+comments+"</option>").appendTo(dataColumn2);
+            }
+        }
+    });  
+}
+</script>
 </body>
 </html>
